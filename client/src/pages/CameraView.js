@@ -85,6 +85,7 @@ export default function CameraView() {
   // Capture native video and send to Loopback WebRTC
   useEffect(() => {
     let animationFrameId;
+    let started = false;
     
     if (isLoopbackEnabled && imgRef.current) {
       if (!loopbackCanvasRef.current) {
@@ -94,34 +95,35 @@ export default function CameraView() {
       const ctx = canvas.getContext('2d');
       
       const drawFrame = () => {
-        if (imgRef.current) {
+        if (imgRef.current && imgRef.current.naturalWidth > 0) {
           const el = imgRef.current;
-          const w = el.naturalWidth || el.videoWidth || 640;
-          const h = el.naturalHeight || el.videoHeight || 480;
+          const w = el.naturalWidth || 640;
+          const h = el.naturalHeight || 480;
           
           if (canvas.width !== w) canvas.width = w;
           if (canvas.height !== h) canvas.height = h;
           
-          // Always draw something so captureStream emits frames
-          ctx.fillStyle = '#000000';
-          ctx.fillRect(0, 0, w, h);
-          
           try {
             ctx.drawImage(el, 0, 0, w, h);
+            // Test if canvas is tainted (CORS issue)
+            if (!started && canvas.width > 0) {
+              try {
+                canvas.toDataURL('image/jpeg', 0.5);
+                started = true;
+                console.log('[WebRTC Loopback] Canvas capture OK, starting stream...');
+                const stream = canvas.captureStream(30);
+                connectLoopback(stream);
+              } catch(e) {
+                console.error('[WebRTC Loopback] Canvas tainted (CORS)!', e);
+              }
+            }
           } catch(e) {
-            // Might fail if image not loaded yet or tainted
+            // Might fail if image not loaded yet
           }
         }
         animationFrameId = requestAnimationFrame(drawFrame);
       };
       drawFrame();
-      
-      // Give it a tiny bit of time to draw the first frame before capturing
-      setTimeout(() => {
-         // Using 30 FPS for professional, fluid motion
-         const stream = canvas.captureStream(30);
-         connectLoopback(stream);
-      }, 500);
     } else {
       cleanupLoopback();
     }
@@ -174,8 +176,8 @@ export default function CameraView() {
   // JPEG frames via HTTP GET in a tight JS loop. Each frame is displayed instantly.
   const token = localStorage.getItem('token') || '';
 
-  // For non-Colab IP cameras, keep classic MJPEG (works fine on LAN)
-  const nativeMjpegUrl = (!colabStreamUrl && camera) 
+  // Camera MJPEG — always available for canvas capture (WebRTC loopback needs it)
+  const nativeMjpegUrl = camera 
     ? `${API_BASE}/api/cameras/${id}/proxy-stream?t=${snapshotKey}&token=${encodeURIComponent(token)}` 
     : '';
 
@@ -752,15 +754,12 @@ export default function CameraView() {
                   ) : (
                     <img
                       ref={imgRef}
-                      crossOrigin="anonymous"
                       src={nativeMjpegUrl || undefined}
                       alt="Live Camera Feed"
-                      // If WebRTC is active, we just make it practically invisible (opacity: 0.001) 
-                      // but NOT completely hidden/display:none, so the browser doesn't throttle the MJPEG stream.
                       className={`w-full h-full object-contain ${isWebRTC ? 'opacity-[0.001] absolute pointer-events-none' : ''}`}
                       style={{ objectFit: transform.objectFit }}
                       onLoad={() => {
-                        if (!colabStreamUrl && !streamActive) setStreamActive(true);
+                        if (!streamActive) setStreamActive(true);
                       }}
                       onError={() => {
                         if (!colabStreamUrl) setStreamError(true);
