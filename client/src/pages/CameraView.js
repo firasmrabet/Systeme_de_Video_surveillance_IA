@@ -48,6 +48,10 @@ export default function CameraView() {
   const [pendingAlert, setPendingAlert] = useState(null);
   // Snapshot refresh: forces fallback to canvas
   const [snapshotKey, setSnapshotKey] = useState(0);
+  const token = localStorage.getItem('token') || '';
+  const nativeMjpegUrl = camera 
+    ? `${API_BASE}/api/cameras/${id}/proxy-stream?t=${snapshotKey}&token=${encodeURIComponent(token)}` 
+    : '';
   // Live View Pro state
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
@@ -177,16 +181,6 @@ export default function CameraView() {
   }, [streamActive, streamUrl, snapshotKey]);
   
   // ============ PURE HTTP SEQUENTIAL FRAME FETCH (Zero Buffer, Zero WebSocket) ============
-  // Instead of <img src=MJPEG> (which browsers buffer 3-5 seconds), we fetch individual 
-  // JPEG frames via HTTP GET in a tight JS loop. Each frame is displayed instantly.
-  const token = localStorage.getItem('token') || '';
-
-  // Camera MJPEG — always available for canvas capture (WebRTC loopback needs it)
-  const nativeMjpegUrl = camera 
-    ? `${API_BASE}/api/cameras/${id}/proxy-stream?t=${snapshotKey}&token=${encodeURIComponent(token)}` 
-    : '';
-
-  // Colab frames are now received via Socket.IO (see COLAB WEBSOCKET PUSH useEffect above)
   // The old HTTP polling loop has been replaced by push-based Socket.IO events
 
   // For non-Colab cameras, set stream active when camera is available
