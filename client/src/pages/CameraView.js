@@ -732,7 +732,7 @@ export default function CameraView() {
                   onMouseUp={transform.endDrag}
                   onMouseLeave={transform.endDrag}
                 >
-                  {/* WebRTC VIDEO — Ultra low latency direct UDP stream */}
+                  {/* VIDEO — WebRTC loopback or native MJPEG */}
                   {isWebRTC ? (
                     <video
                       ref={webrtcVideoRef}
@@ -767,14 +767,6 @@ export default function CameraView() {
                       }}
                     />
                   )}
-                  
-                  {/* WebRTC Video Loopback */}
-                  <video
-                    ref={webrtcVideoRef}
-                    autoPlay playsInline muted
-                    className={`w-full h-full object-contain ${isWebRTC ? 'block' : 'hidden'}`}
-                    style={{ objectFit: transform.objectFit }}
-                  />
                     
                   {/* WebRTC Connection Badge */}
                   {isWebRTC && (
