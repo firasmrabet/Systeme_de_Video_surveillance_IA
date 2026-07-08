@@ -44,6 +44,7 @@ export default function CameraView() {
   const [proxyUrl, setProxyUrl] = useState(null);
   const [colabStreamUrl, setColabStreamUrl] = useState(null);
   const [webrtcSignalingUrl, setWebrtcSignalingUrl] = useState(null);
+  const [isLoopbackEnabled, setIsLoopbackEnabled] = useState(false);
   const [pendingAlert, setPendingAlert] = useState(null);
   // Snapshot refresh: forces fallback to canvas
   const [snapshotKey, setSnapshotKey] = useState(0);
@@ -59,6 +60,8 @@ export default function CameraView() {
   const [showManualAlertConfirm, setShowManualAlertConfirm] = useState(false);
   const [showAnnotatedView, setShowAnnotatedView] = useState(false);
   const [hasAnnotatedFrame, setHasAnnotatedFrame] = useState(false);
+  
+  // WebRTC loopback disabled — V16 uses Socket.IO push (HTTP POST → Socket.IO)
 
   const imgRef = useRef(null);
   const annotatedImgRef = useRef(null);
@@ -69,11 +72,59 @@ export default function CameraView() {
   const currentDetsRef = useRef([]);
   const [videoRect, setVideoRect] = useState({ left: 0, top: 0, width: '100%', height: '100%' });
 
-  // ============ WebRTC STREAM (Professional Zero-Lag) ============
-  // The tunnel only carries the tiny SDP signaling (~500 bytes)
-  // Video travels directly via WebRTC UDP (STUN/TURN)
-  const { videoRef: webrtcVideoRef, connected: webrtcConnected, error: webrtcError, fps: webrtcFps, reconnect: webrtcReconnect } = useWebRTCStream(webrtcSignalingUrl);
-  const isWebRTC = !!webrtcSignalingUrl && webrtcConnected;
+  // ============ WebRTC LOOPBACK (Professional Zero-Lag, Zero Tunnel) ============
+  const { videoRef: webrtcVideoRef, connected: webrtcConnected, error: webrtcError, fps: webrtcFps, connectLoopback, cleanup: cleanupLoopback } = useWebRTCStream();
+  const isWebRTC = webrtcConnected;
+  const loopbackCanvasRef = useRef(null);
+
+  // Capture native video and send to Loopback WebRTC
+  useEffect(() => {
+    let animationFrameId;
+    
+    if (isLoopbackEnabled && imgRef.current) {
+      if (!loopbackCanvasRef.current) {
+        loopbackCanvasRef.current = document.createElement('canvas');
+      }
+      const canvas = loopbackCanvasRef.current;
+      const ctx = canvas.getContext('2d');
+      
+      const drawFrame = () => {
+        if (imgRef.current) {
+          const el = imgRef.current;
+          const w = el.naturalWidth || el.videoWidth || 640;
+          const h = el.naturalHeight || el.videoHeight || 480;
+          
+          if (canvas.width !== w) canvas.width = w;
+          if (canvas.height !== h) canvas.height = h;
+          
+          // Always draw something so captureStream emits frames
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(0, 0, w, h);
+          
+          try {
+            ctx.drawImage(el, 0, 0, w, h);
+          } catch(e) {
+            // Might fail if image not loaded yet or tainted
+          }
+        }
+        animationFrameId = requestAnimationFrame(drawFrame);
+      };
+      drawFrame();
+      
+      // Give it a tiny bit of time to draw the first frame before capturing
+      setTimeout(() => {
+         // Using 30 FPS for professional, fluid motion
+         const stream = canvas.captureStream(30);
+         connectLoopback(stream);
+      }, 500);
+    } else {
+      cleanupLoopback();
+    }
+    
+    return () => {
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+    };
+  }, [isLoopbackEnabled, connectLoopback, cleanupLoopback]);
 
   // Update videoRect whenever window resizes or frame loads to perfectly align DOM boxes
   useEffect(() => {
@@ -206,12 +257,12 @@ export default function CameraView() {
     return () => { cancelled = true; clearTimeout(pollTimer); };
   }, [webrtcSignalingUrl]);
 
-  // ============ COLAB SOCKET.IO FALLBACK (kept for backward compat) ============
+  // ============ COLAB SOCKET.IO (V16 Push-based) ============
   useEffect(() => {
-    if (!socket || isWebRTC) return; // Skip if WebRTC is active
+    if (!socket) return;
 
     const onColabFrame = (data) => {
-      if (!data || !data.frame || isWebRTC) return;
+      if (!data || !data.frame) return;
       
       if (imgRef.current) {
         imgRef.current.src = `data:image/jpeg;base64,${data.frame}`;
@@ -696,9 +747,12 @@ export default function CameraView() {
                   ) : (
                     <img
                       ref={imgRef}
+                      crossOrigin="anonymous"
                       src={nativeMjpegUrl || undefined}
                       alt="Live Camera Feed"
-                      className="w-full h-full object-contain"
+                      // If WebRTC is active, we just make it practically invisible (opacity: 0.001) 
+                      // but NOT completely hidden/display:none, so the browser doesn't throttle the MJPEG stream.
+                      className={`w-full h-full object-contain ${isWebRTC ? 'opacity-[0.001] absolute pointer-events-none' : ''}`}
                       style={{ objectFit: transform.objectFit }}
                       onLoad={() => {
                         if (!colabStreamUrl && !streamActive) setStreamActive(true);
@@ -708,6 +762,14 @@ export default function CameraView() {
                       }}
                     />
                   )}
+                  
+                  {/* WebRTC Video Loopback */}
+                  <video
+                    ref={webrtcVideoRef}
+                    autoPlay playsInline muted
+                    className={`w-full h-full object-contain ${isWebRTC ? 'block' : 'hidden'}`}
+                    style={{ objectFit: transform.objectFit }}
+                  />
                     
                   {/* WebRTC Connection Badge */}
                   {isWebRTC && (
@@ -717,11 +779,11 @@ export default function CameraView() {
                   )}
 
                   {/* WebRTC Error/Connecting indicator */}
-                  {webrtcSignalingUrl && !webrtcConnected && (
+                  {isLoopbackEnabled && !webrtcConnected && (
                     <div className="absolute inset-0 flex items-center justify-center z-15">
                       <div className="text-center">
                         <div className="animate-spin w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto mb-3" />
-                        <p className="text-white/80 text-sm">Connexion WebRTC en cours...</p>
+                        <p className="text-white/80 text-sm">Connexion WebRTC Colab P2P en cours...</p>
                         {webrtcError && <p className="text-red-400 text-xs mt-1">{webrtcError}</p>}
                       </div>
                     </div>
@@ -922,20 +984,10 @@ export default function CameraView() {
                     <Scan className="w-4 h-4 mr-2" />
                     {isDetecting ? 'Stop AI' : 'Start AI'}
                   </motion.button>
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setShowAnnotatedView(v => !v)}
-                    disabled={!isDetecting}
-                    className={`flex items-center px-5 py-2.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                      showAnnotatedView
-                        ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-500/20'
-                        : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'
-                    }`}
-                  >
+                  <div className="flex items-center px-5 py-2.5 rounded-xl font-semibold text-sm bg-emerald-900/50 text-emerald-400 border border-emerald-700/50">
                     <Eye className="w-4 h-4 mr-2" />
-                    {showAnnotatedView ? 'Vue IA ON' : 'Vue IA'}
-                  </motion.button>
+                    AI Colab (V16 Push)
+                  </div>
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
@@ -1001,11 +1053,11 @@ export default function CameraView() {
                 {[
                   { label: 'Status', value: <span className={`flex items-center ${streamActive && !streamError ? 'text-emerald-400' : 'text-red-400'}`}><Wifi className="w-3.5 h-3.5 mr-1" />{streamActive && !streamError ? 'Connected' : 'Disconnected'}</span> },
                   { label: 'Source', value: <span className="text-white capitalize flex items-center">{cameraSource === 'ip-camera' && <Globe className="w-3.5 h-3.5 mr-1 text-indigo-400" />}{cameraSource.replace('-', ' ')}</span> },
-                  { label: 'Stream', value: <span className="text-xs font-bold px-2 py-0.5 rounded-full border text-emerald-400 border-emerald-500/30 bg-emerald-500/10">MJPEG Direct</span> },
+                  { label: 'Stream', value: <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${isWebRTC ? 'text-indigo-400 border-indigo-500/30 bg-indigo-500/10' : 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'}`}>{isWebRTC ? 'Loopback WebRTC' : 'MJPEG Direct'}</span> },
                   { label: 'URL', value: <span className="text-white text-xs font-mono truncate max-w-[120px] block" title={streamUrl}>{streamUrl ? `${streamUrl.slice(0, 40)}...` : 'N/A'}</span> },
                   { label: 'Zoom', value: <span className="text-amber-300 font-mono font-bold">{transform.zoom.toFixed(1)}×</span> },
                   { label: 'Filter', value: <span className="text-indigo-300 capitalize">{activePreset}</span> },
-                  { label: 'AI', value: <span className={isDetecting ? 'text-indigo-400 font-bold' : 'text-slate-500'}>{isDetecting ? 'ACTIVE' : 'OFF'}</span> },
+                   { label: 'AI Colab', value: <span className={colabStreamUrl ? 'text-emerald-400 font-bold' : 'text-slate-500'}>{colabStreamUrl ? 'V16 PUSH ACTIVE' : 'OFF'}</span> },
                 ].map((item, i) => (
                   <div key={i} className="flex justify-between items-center">
                     <span className="text-slate-400">{item.label}</span>
