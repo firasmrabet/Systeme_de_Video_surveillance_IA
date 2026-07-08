@@ -61,7 +61,12 @@ export default function CameraView() {
   const [showAnnotatedView, setShowAnnotatedView] = useState(false);
   const [hasAnnotatedFrame, setHasAnnotatedFrame] = useState(false);
   
-  // WebRTC loopback disabled — V16 uses Socket.IO push (HTTP POST → Socket.IO)
+  // Start WebRTC automatically when camera is active
+  useEffect(() => {
+    if (streamActive && !colabStreamUrl && !isLoopbackEnabled) {
+      setIsLoopbackEnabled(true);
+    }
+  }, [streamActive, colabStreamUrl, isLoopbackEnabled]);
 
   const imgRef = useRef(null);
   const annotatedImgRef = useRef(null);
@@ -984,10 +989,20 @@ export default function CameraView() {
                     <Scan className="w-4 h-4 mr-2" />
                     {isDetecting ? 'Stop AI' : 'Start AI'}
                   </motion.button>
-                  <div className="flex items-center px-5 py-2.5 rounded-xl font-semibold text-sm bg-emerald-900/50 text-emerald-400 border border-emerald-700/50">
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setIsLoopbackEnabled(v => !v)}
+                    disabled={!streamActive}
+                    className={`flex items-center px-5 py-2.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                      isLoopbackEnabled
+                        ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-500/20'
+                        : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'
+                    }`}
+                  >
                     <Eye className="w-4 h-4 mr-2" />
-                    AI Colab (V16 Push)
-                  </div>
+                    {isLoopbackEnabled ? 'Stop AI Colab (WebRTC)' : 'Start AI Colab (WebRTC)'}
+                  </motion.button>
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
@@ -1057,7 +1072,7 @@ export default function CameraView() {
                   { label: 'URL', value: <span className="text-white text-xs font-mono truncate max-w-[120px] block" title={streamUrl}>{streamUrl ? `${streamUrl.slice(0, 40)}...` : 'N/A'}</span> },
                   { label: 'Zoom', value: <span className="text-amber-300 font-mono font-bold">{transform.zoom.toFixed(1)}×</span> },
                   { label: 'Filter', value: <span className="text-indigo-300 capitalize">{activePreset}</span> },
-                   { label: 'AI Colab', value: <span className={colabStreamUrl ? 'text-emerald-400 font-bold' : 'text-slate-500'}>{colabStreamUrl ? 'V16 PUSH ACTIVE' : 'OFF'}</span> },
+                   { label: 'AI Colab', value: <span className={isLoopbackEnabled ? 'text-purple-400 font-bold' : 'text-slate-500'}>{isLoopbackEnabled ? (isWebRTC ? 'WEBRTC CONNECTED' : 'WEBRTC CONNECTING...') : 'OFF'}</span> },
                 ].map((item, i) => (
                   <div key={i} className="flex justify-between items-center">
                     <span className="text-slate-400">{item.label}</span>
