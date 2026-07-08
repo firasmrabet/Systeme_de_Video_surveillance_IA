@@ -82,56 +82,61 @@ export default function CameraView() {
   const isWebRTC = webrtcConnected;
   const loopbackCanvasRef = useRef(null);
 
-  // Capture native video and send to Loopback WebRTC
+  // Capture camera frames via fetch (avoids tainted canvas from MJPEG <img>)
   useEffect(() => {
-    let animationFrameId;
-    let started = false;
+    let timeoutId;
+    let running = false;
     
-    if (isLoopbackEnabled && imgRef.current) {
+    if (isLoopbackEnabled && nativeMjpegUrl) {
       if (!loopbackCanvasRef.current) {
         loopbackCanvasRef.current = document.createElement('canvas');
       }
       const canvas = loopbackCanvasRef.current;
       const ctx = canvas.getContext('2d');
+      canvas.width = 640;
+      canvas.height = 480;
       
-      const drawFrame = () => {
-        if (imgRef.current && imgRef.current.naturalWidth > 0) {
-          const el = imgRef.current;
-          const w = el.naturalWidth || 640;
-          const h = el.naturalHeight || 480;
-          
-          if (canvas.width !== w) canvas.width = w;
-          if (canvas.height !== h) canvas.height = h;
-          
-          try {
-            ctx.drawImage(el, 0, 0, w, h);
-            // Test if canvas is tainted (CORS issue)
-            if (!started && canvas.width > 0) {
-              try {
-                canvas.toDataURL('image/jpeg', 0.5);
-                started = true;
-                console.log('[WebRTC Loopback] Canvas capture OK, starting stream...');
-                const stream = canvas.captureStream(30);
-                connectLoopback(stream);
-              } catch(e) {
-                console.error('[WebRTC Loopback] Canvas tainted (CORS)!', e);
-              }
+      running = true;
+      let started = false;
+      
+      const fetchAndDraw = async () => {
+        if (!running) return;
+        try {
+          const snapshotUrl = nativeMjpegUrl.replace('/proxy-stream', '/snapshot');
+          const resp = await fetch(snapshotUrl);
+          if (resp.ok) {
+            const blob = await resp.blob();
+            const bitmap = await createImageBitmap(blob);
+            if (canvas.width !== bitmap.width) canvas.width = bitmap.width;
+            if (canvas.height !== bitmap.height) canvas.height = bitmap.height;
+            ctx.drawImage(bitmap, 0, 0);
+            bitmap.close();
+            
+            if (!started) {
+              started = true;
+              console.log('[WebRTC Loopback] First frame captured, starting WebRTC stream...');
+              const stream = canvas.captureStream(30);
+              connectLoopback(stream);
             }
-          } catch(e) {
-            // Might fail if image not loaded yet
           }
+        } catch(e) {
+          console.warn('[WebRTC Loopback] Frame fetch failed:', e.message);
         }
-        animationFrameId = requestAnimationFrame(drawFrame);
+        if (running) {
+          timeoutId = setTimeout(fetchAndDraw, 33); // ~30 FPS
+        }
       };
-      drawFrame();
+      
+      fetchAndDraw();
     } else {
       cleanupLoopback();
     }
     
     return () => {
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      running = false;
+      if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [isLoopbackEnabled, connectLoopback, cleanupLoopback]);
+  }, [isLoopbackEnabled, connectLoopback, cleanupLoopback, nativeMjpegUrl]);
 
   // Update videoRect whenever window resizes or frame loads to perfectly align DOM boxes
   useEffect(() => {
