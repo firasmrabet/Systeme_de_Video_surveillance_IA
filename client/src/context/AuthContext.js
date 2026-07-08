@@ -3,7 +3,7 @@ import axios from 'axios';
 
 const AuthContext = createContext(null);
 
-const API_URL = `${process.env.REACT_APP_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`}/api`;
+const API_URL = `${process.env.REACT_APP_API_URL || `${window.location.protocol}//${window.location.hostname}:5001`}/api`;
 
 const api = axios.create({
   baseURL: API_URL,
@@ -112,25 +112,7 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const addPhoneNumber = useCallback(async (number, label) => {
-    try {
-      const response = await api.post('/auth/phone', { number, label });
-      setUser(prev => ({ ...prev, phoneNumbers: response.data.phoneNumbers }));
-      return { success: true, phoneNumbers: response.data.phoneNumbers };
-    } catch (error) {
-      return { success: false, error: error.response?.data?.error || 'Failed to add phone' };
-    }
-  }, []);
 
-  const removePhoneNumber = useCallback(async (number) => {
-    try {
-      const response = await api.delete(`/auth/phone/${encodeURIComponent(number)}`);
-      setUser(prev => ({ ...prev, phoneNumbers: response.data.phoneNumbers }));
-      return { success: true, phoneNumbers: response.data.phoneNumbers };
-    } catch (error) {
-      return { success: false, error: error.response?.data?.error || 'Failed to remove phone' };
-    }
-  }, []);
 
   const value = {
     user,
@@ -142,8 +124,6 @@ export function AuthProvider({ children }) {
     register,
     logout,
     updateProfile,
-    addPhoneNumber,
-    removePhoneNumber,
     api
   };
 

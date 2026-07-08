@@ -204,14 +204,20 @@ class LiveJPEGStreamer {
 
     const proto = useTLS ? 'https' : 'http';
     logger.info(`[LiveStream] ${cameraId} trying MJPEG on ${proto}://${host}:${port} paths=[${paths.join(', ')}]`);
-    this._tryMjpegPath(cameraId, stream, epoch, camera, proto, host, port, paths, 0);
+    this._tryMjpegPath(cameraId, stream, epoch, camera, proto, host, port, paths, 0, false);
   }
 
-  _tryMjpegPath(cameraId, stream, epoch, camera, proto, host, port, paths, idx) {
+  _tryMjpegPath(cameraId, stream, epoch, camera, proto, host, port, paths, idx, isPort8080Fallback) {
     // *** STALE CHECK — critical for preventing duplicate streams ***
     if (stream.epoch !== epoch) return;
 
     if (idx >= paths.length) {
+      // Robustness: If the user forgot the IP Webcam Android port (8080) and left it as default (80)
+      if (!isPort8080Fallback && (!camera.port || camera.port === 80)) {
+        logger.info(`[LiveStream] ${cameraId} no MJPEG path works on port 80, trying port 8080 as fallback`);
+        this._tryMjpegPath(cameraId, stream, epoch, camera, proto, host, 8080, paths, 0, true);
+        return;
+      }
       logger.warn(`[LiveStream] ${cameraId} no MJPEG path works, falling back to polling`);
       this._startPollingLoop(cameraId, stream, epoch);
       return;
@@ -269,7 +275,7 @@ class LiveJPEGStreamer {
             stream.mjpegBuffer = Buffer.alloc(0);
             setTimeout(() => {
               if (stream.epoch !== epoch) return;
-              this._tryMjpegPath(cameraId, stream, epoch, camera, proto, host, port, paths, idx);
+              this._tryMjpegPath(cameraId, stream, epoch, camera, proto, host, port, paths, idx, isPort8080Fallback);
             }, 1000);
           }
         });
@@ -281,7 +287,7 @@ class LiveJPEGStreamer {
             logger.warn(`[LiveStream] ${cameraId} MJPEG error, reconnecting in 1s`);
             setTimeout(() => {
               if (stream.epoch !== epoch) return;
-              this._tryMjpegPath(cameraId, stream, epoch, camera, proto, host, port, paths, idx);
+              this._tryMjpegPath(cameraId, stream, epoch, camera, proto, host, port, paths, idx, isPort8080Fallback);
             }, 1000);
           }
         });
@@ -289,19 +295,19 @@ class LiveJPEGStreamer {
         // Not MJPEG — try next path
         res.destroy();
         if (stream.epoch !== epoch) return;
-        this._tryMjpegPath(cameraId, stream, epoch, camera, proto, host, port, paths, idx + 1);
+        this._tryMjpegPath(cameraId, stream, epoch, camera, proto, host, port, paths, idx + 1, isPort8080Fallback);
       }
     });
 
     req.on('timeout', () => {
       req.destroy();
       if (stream.epoch !== epoch) return;
-      this._tryMjpegPath(cameraId, stream, epoch, camera, proto, host, port, paths, idx + 1);
+      this._tryMjpegPath(cameraId, stream, epoch, camera, proto, host, port, paths, idx + 1, isPort8080Fallback);
     });
 
     req.on('error', () => {
       if (stream.epoch !== epoch) return;
-      this._tryMjpegPath(cameraId, stream, epoch, camera, proto, host, port, paths, idx + 1);
+      this._tryMjpegPath(cameraId, stream, epoch, camera, proto, host, port, paths, idx + 1, isPort8080Fallback);
     });
 
     req.end();

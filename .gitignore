@@ -113,3 +113,16 @@ preview.jpg
 result.json
 input.json
 *.json.bak
+*.dll
+*.mp4
+*.mp4.tmp
+counts.txt
+fix_nb.py
+pinggy_*.txt
+pip_ultra.txt
+ultra_ver.txt
+scripts/
+server/temp/
+server/nodemon.json
+firas.ipynb
+SentinelAI_Surveillance_GPU.ipynb

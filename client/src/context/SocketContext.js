@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 
 const SocketContext = createContext(null);
 
-const SOCKET_URL = process.env.REACT_APP_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
+const SOCKET_URL = process.env.REACT_APP_API_URL || `${window.location.protocol}//${window.location.hostname}:5001`;
 
 export function SocketProvider({ children }) {
   const [socket, setSocket] = useState(null);

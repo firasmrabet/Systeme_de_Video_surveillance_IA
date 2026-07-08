@@ -222,9 +222,9 @@ class CameraManager {
             await aiDetection.detect(frame, cameraId);
           }
 
-          // 1 FPS pour la detection AI (3 models YOLO sur CPU = lourd) ;
+          // 2 FPS pour la detection AI (3 models YOLO optimisés à 320px) ;
           // le stream MJPEG reste a 30 FPS pour la video temps reel
-          await this._sleep(1000);
+          await this._sleep(500);
         } catch (error) {
           logger.error(`[Detection] Error for camera ${cameraId}:`, error.message || error);
           await this._sleep(2000);
@@ -276,6 +276,14 @@ class CameraManager {
         candidates.push(`${proto}://${authPart}${camera.host}${portPart}/video`);
         candidates.push(`${proto}://${authPart}${camera.host}${portPart}/?action=stream`);
         candidates.push(`${proto}://${authPart}${camera.host}${portPart}/videofeed`);
+
+        // Robustness: If the user forgot the IP Webcam Android port (8080) and left it as default (80)
+        if (!camera.port || camera.port === 80) {
+          candidates.push(`${proto}://${authPart}${camera.host}:8080/shot.jpg`);
+          candidates.push(`${proto}://${authPart}${camera.host}:8080/photo.jpg`);
+          candidates.push(`${proto}://${authPart}${camera.host}:8080/video`);
+          candidates.push(`${proto}://${authPart}${camera.host}:8080/videofeed`);
+        }
       }
 
       const tryNext = (i) => {

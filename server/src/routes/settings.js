@@ -12,7 +12,8 @@ router.get('/', authenticate, async (req, res) => {
     if (!settings) {
       settings = await db.updateSettings(req.user.id, {
         notifications: {
-          sms: true,
+          telegram: true,
+          telegramChatId: '',
           email: true,
           push: true,
           cooldownSeconds: 30,
@@ -44,7 +45,8 @@ router.get('/', authenticate, async (req, res) => {
 
 // Update notification settings
 router.put('/notifications', authenticate, [
-  body('sms').optional().isBoolean(),
+  body('telegram').optional().isBoolean(),
+  body('telegramChatId').optional().isString(),
   body('email').optional().isBoolean(),
   body('push').optional().isBoolean(),
   body('cooldownSeconds').optional().isInt({ min: 5, max: 300 }),

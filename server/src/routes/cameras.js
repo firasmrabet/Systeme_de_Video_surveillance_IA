@@ -1233,5 +1233,134 @@ router.delete('/:id', authenticate, async (req, res) => {
     res.status(500).json({ error: 'Failed to delete camera' });
   }
 });
+// ============ MANUAL ALERT ============
+// Allows the user to trigger an alert manually while watching the live feed.
+// Captures a fresh frame, sends Telegram (with photo) + Email, exactly like AI alerts.
+router.post('/:id/manual-alert', authenticate, async (req, res) => {
+  try {
+    const camera = await db.getCameraById(req.params.id);
+    if (!camera) return res.status(404).json({ error: 'Camera not found' });
+    if (camera.ownerId !== req.user.id) return res.status(403).json({ error: 'Access denied' });
+
+    const notifications = req.app.locals.notifications;
+    if (!notifications) return res.status(500).json({ error: 'Notification service not available' });
+
+    // Try to capture a fresh frame from the camera for the alert
+    let frameBase64 = null;
+    
+    // 1. Try to get the absolute latest frame from the live streamer (Zero latency)
+    const liveStreamer = req.app.locals.liveStreamer;
+    if (liveStreamer) {
+      const stream = liveStreamer.streams.get(camera.id);
+      if (stream && stream.lastJpeg) {
+        frameBase64 = stream.lastJpeg.toString('base64');
+      }
+    }
+
+    // 2. Fallback to CameraManager URL capture
+    const cameraManager = req.app.locals.cameraManager;
+    if (!frameBase64 && cameraManager) {
+      try {
+        const frame = await cameraManager._captureFrameFromUrl(camera, camera.id);
+        if (frame && frame.jpeg) {
+          frameBase64 = frame.jpeg.toString('base64');
+        }
+      } catch (e) {
+        logger.warn(`[ManualAlert] Could not capture frame for ${camera.id}: ${e.message}`);
+      }
+    }
+
+    // 3. If backend failed, try the request body from frontend (Strip base64 prefix to prevent corruption)
+    if (!frameBase64 && req.body.frameBase64) {
+      frameBase64 = req.body.frameBase64.replace(/^data:image\/\w+;base64,/, '');
+    }
+
+    // 4. Record a 4-second video clip using ffmpeg (so Telegram and Email get the video too)
+    let clip_path = null;
+    try {
+      const ffmpegPath = require('ffmpeg-static');
+      const { spawn } = require('child_process');
+      const path = require('path');
+      const fs = require('fs');
+      
+      if (ffmpegPath) {
+        const clipName = `manual-${Date.now()}.mp4`;
+        const clipDir = path.join(__dirname, '..', '..', 'data', 'clips');
+        if (!fs.existsSync(clipDir)) fs.mkdirSync(clipDir, { recursive: true });
+        
+        const absoluteClipPath = path.join(clipDir, clipName);
+        
+        // Use the internal proxy stream with the user's token to bypass IP Webcam connection limits
+        const token = req.headers.authorization?.split(' ')[1] || '';
+        const localProxyUrl = `http://127.0.0.1:${process.env.PORT || 5000}/api/cameras/${camera.id}/proxy-stream?token=${token}`;
+        
+        logger.info(`[ManualAlert] Recording 4s clip from local proxy`);
+        
+        await new Promise((resolve) => {
+          const proc = spawn(ffmpegPath, [
+            '-y', 
+            '-use_wallclock_as_timestamps', '1',
+            '-i', localProxyUrl, 
+            '-t', '4', 
+            '-c:v', 'libx264', 
+            '-preset', 'ultrafast', 
+            '-pix_fmt', 'yuv420p',
+            absoluteClipPath
+          ], { windowsHide: true });
+          
+          proc.on('close', (code) => {
+            if (code === 0 && fs.existsSync(absoluteClipPath) && fs.statSync(absoluteClipPath).size > 1000) {
+              clip_path = `/data/clips/${clipName}`;
+            } else {
+              logger.warn(`[ManualAlert] FFmpeg exited with code ${code} or file empty`);
+            }
+            resolve();
+          });
+          proc.on('error', (err) => {
+            logger.warn(`[ManualAlert] FFmpeg spawn error: ${err.message}`);
+            resolve();
+          });
+        });
+      }
+    } catch (e) {
+      logger.warn('[ManualAlert] Failed to record clip:', e.message);
+    }
+
+    const alert = {
+      id: `manual-${Date.now()}`,
+      cameraId: camera.id,
+      ownerId: req.user.id,
+      type: 'manual',
+      severity: 'critical',
+      confidence: 1.0,
+      timestamp: new Date().toISOString(),
+      clip_path: clip_path,
+      details: {
+        description: req.body.description || 'Manual alert triggered by user',
+        triggeredBy: req.user.email,
+        clipPath: clip_path
+      }
+    };
+
+    // Save the alert to the database
+    try {
+      await db.createAlert(alert);
+    } catch (e) {
+      logger.warn('[ManualAlert] Could not save alert to DB:', e.message);
+    }
+
+    // Send notifications (Telegram + Email + Push) exactly like AI alerts
+    await notifications.sendAlert(alert, frameBase64);
+
+    // Also emit via WebSocket so the UI updates in real time
+    notifications.emitAlertToOwner(alert);
+
+    logger.info(`Manual alert triggered by ${req.user.email} for camera ${camera.name}`);
+    res.json({ success: true, alertId: alert.id, message: 'Manual alert sent successfully' });
+  } catch (error) {
+    logger.error('Manual alert error:', error);
+    res.status(500).json({ error: 'Failed to send manual alert' });
+  }
+});
 
 module.exports = router;

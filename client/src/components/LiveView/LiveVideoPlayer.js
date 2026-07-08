@@ -5,7 +5,7 @@ import { WebCodecsPlayer, attachLiveFrameSource } from './WebCodecsPlayer';
 export { WebCodecsPlayer, attachLiveFrameSource };
 import { CameraOff, Loader2 } from 'lucide-react';
 
-const API_BASE = process.env.REACT_APP_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
+const API_BASE = process.env.REACT_APP_API_URL || `${window.location.protocol}//${window.location.hostname}:5001`;
 
 /**
  * LiveVideoPlayer — TikTok-quality live video using WebCodecs + H.264 + MSE.

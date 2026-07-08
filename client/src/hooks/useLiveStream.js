@@ -55,7 +55,7 @@ export function useLiveStream(cameraId, options = {}) {
         // Get auth token from localStorage
         const token = localStorage.getItem('token');
         if (!token) return;
-        const baseURL = process.env.REACT_APP_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
+        const baseURL = process.env.REACT_APP_API_URL || `${window.location.protocol}//${window.location.hostname}:5001`;
         const res = await fetch(`${baseURL}/api/cameras/${cameraId}/preview?ts=${Date.now()}`, {
           headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store'

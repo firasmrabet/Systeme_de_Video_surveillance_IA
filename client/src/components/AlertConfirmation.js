@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { AlertTriangle, ShieldAlert, CheckCircle, XCircle, Video } from 'lucide-react';
 
 // Use environment API base if configured, otherwise fallback to standard dev port
-const API_BASE = process.env.REACT_APP_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
+const API_BASE = process.env.REACT_APP_API_URL || `${window.location.protocol}//${window.location.hostname}:5001`;
 
 export default function AlertConfirmation({ alert, onConfirm, onDismiss }) {
   if (!alert) return null;

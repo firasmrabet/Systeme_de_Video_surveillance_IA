@@ -33,7 +33,8 @@ const io = new Server(server, {
     origin: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true
-  }
+  },
+  maxHttpBufferSize: 10 * 1024 * 1024  // 10MB — needed for base64 JPEG frames from Colab
 });
 
 // Security middleware
@@ -114,6 +115,152 @@ app.use('/api/photos', photoRoutes);
 // Serve saved clips statically
 const clipsDir = path.join(__dirname, '../clips');
 app.use('/clips', express.static(clipsDir));
+
+// ============ COLAB WEBSOCKET PUSH (Zero-Lag Architecture) ============
+// Colab pushes annotated frames via HTTP POST → Server broadcasts via Socket.IO
+// Eliminates: second Pinggy tunnel, HTTP polling, ntfy.sh polling, MJPEG parsing
+const https = require('https');
+const httpNative = require('http');
+
+let colabConnected = false;
+let colabLastFrameAt = 0;
+let colabFrameCount = 0;
+let colabFps = 0;
+let colabFpsCounter = 0;
+let colabFpsTimer = Date.now();
+
+// FPS counter reset every second
+setInterval(() => {
+  colabFps = colabFpsCounter;
+  colabFpsCounter = 0;
+}, 1000);
+
+// Endpoint: Colab pushes annotated frames here via HTTP POST
+// Colab sends base64 JPEG + detection data, server broadcasts to all browser clients via Socket.IO
+// This is the KEY optimization: push-based, not poll-based
+app.post('/api/colab/push-frame', express.json({ limit: '10mb' }), (req, res) => {
+  const { frame, detections, timestamp, fps } = req.body;
+  
+  if (!frame) {
+    return res.status(400).json({ error: 'No frame data' });
+  }
+
+  colabConnected = true;
+  colabLastFrameAt = Date.now();
+  colabFrameCount++;
+  colabFpsCounter++;
+
+  // Broadcast annotated frame via Socket.IO (push-based, zero-polling)
+  if (io) {
+    // Send frame to Colab viewers (annotated view)
+    io.to('colab-viewers').emit('colab-annotated-frame', {
+      frame,           // base64 JPEG
+      detections: detections || [],
+      timestamp: timestamp || Date.now(),
+      fps: fps || colabFps
+    });
+    
+    // Also broadcast detections to all camera subscribers for overlay rendering
+    if (detections && detections.length > 0) {
+      io.emit('detections', {
+        cameraId: req.body.camera_id || 'colab',
+        detections,
+        timestamp: timestamp || Date.now(),
+        source: 'colab-ai'
+      });
+    }
+
+    // Broadcast colab status
+    io.emit('colab-status', {
+      connected: true,
+      fps: fps || colabFps,
+      frameCount: colabFrameCount
+    });
+  }
+
+  res.json({ ok: true, received: colabFrameCount });
+});
+
+// Endpoint: Colab sends heartbeats to maintain connection status
+app.post('/api/colab/heartbeat', express.json(), (req, res) => {
+  colabConnected = true;
+  colabLastFrameAt = Date.now();
+  const { fps: remoteFps, detections_count } = req.body || {};
+  res.json({ ok: true, serverTime: Date.now() });
+});
+
+// Endpoint: Colab signals disconnection
+app.post('/api/colab/disconnect', (req, res) => {
+  colabConnected = false;
+  io && io.emit('colab-status', { connected: false });
+  res.json({ ok: true });
+});
+
+// Endpoint: Frontend checks Colab connection status (replaces ntfy.sh polling)
+app.get('/api/colab-status', (req, res) => {
+  // Auto-detect disconnection if no frame received in 5 seconds
+  if (colabConnected && Date.now() - colabLastFrameAt > 5000) {
+    colabConnected = false;
+  }
+  res.json({
+    connected: colabConnected,
+    lastFrameAt: colabLastFrameAt,
+    frameCount: colabFrameCount,
+    fps: colabFps,
+    url: null  // No longer needed — push-based
+  });
+});
+
+// Endpoint: Legacy colab-stream for backward compatibility (redirects to push-based)
+app.get('/api/colab-stream', (req, res) => {
+  res.status(410).json({
+    error: 'Legacy polling endpoint deprecated',
+    message: 'Use WebSocket push mode. Colab should POST to /api/colab/push-frame',
+    migrate: 'Replace Flask+Pinggy with HTTP POST to this server'
+  });
+});
+
+app.get('/api/colab-frame', (req, res) => {
+  res.status(410).json({
+    error: 'Legacy polling endpoint deprecated',
+    message: 'Use Socket.IO push mode. Frontend should listen to colab-annotated-frame event'
+  });
+});
+
+// Camera proxy: Colab reads camera stream via this server tunnel
+// Forwards requests to the local camera_streamer on port 5100
+const CAMERA_STREAMER_URL = process.env.CAMERA_STREAMER_URL || 'http://localhost:5100';
+const httpProxy = require('http');
+
+app.get('/api/camera/stream', (req, res) => {
+  const proxyReq = httpProxy.get(`${CAMERA_STREAMER_URL}/videofeed`, (proxyRes) => {
+    res.writeHead(proxyRes.statusCode, {
+      'Content-Type': proxyRes.headers['content-type'] || 'multipart/x-mixed-replace; boundary=frame',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive'
+    });
+    proxyRes.pipe(res);
+  });
+  proxyReq.on('error', (e) => {
+    res.status(502).json({ error: 'Camera streamer unavailable', details: e.message });
+  });
+  proxyReq.setTimeout(30000, () => { proxyReq.destroy(); });
+});
+
+app.get('/api/camera/snapshot', async (req, res) => {
+  try {
+    const proxyReq = httpProxy.get(`${CAMERA_STREAMER_URL}/shot.jpg`, (proxyRes) => {
+      res.writeHead(proxyRes.statusCode, { 'Content-Type': 'image/jpeg' });
+      proxyRes.pipe(res);
+    });
+    proxyReq.on('error', (e) => {
+      res.status(502).json({ error: 'Camera streamer unavailable' });
+    });
+    proxyReq.setTimeout(10000, () => { proxyReq.destroy(); });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // Health check — Chap 14.2 : expose engine + stats
 app.get('/api/health', (req, res) => {
@@ -216,6 +363,18 @@ io.on('connection', (socket) => {
 
   // Stream URL is now fetched via REST: GET /api/cameras/:id/stream-url
   // Socket.IO is used only for detection results and alerts
+  // Colab push mode: browser subscribes to receive annotated frames
+  socket.on('subscribe-colab', () => {
+    socket.join('colab-viewers');
+    logger.info(`[Colab] Browser subscribed to annotated frames: ${socket.id}`);
+    // Send current status
+    socket.emit('colab-status', { connected: colabConnected, fps: colabFps });
+  });
+
+  socket.on('unsubscribe-colab', () => {
+    socket.leave('colab-viewers');
+  });
+
   socket.on('start-detection', async (cameraId) => {
     await cameraManager.startDetection(cameraId, aiDetection);
   });

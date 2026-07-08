@@ -11,6 +11,8 @@ const db = require('../utils/database');
 const aiBridge = require('./aiBridge');
 const threatScoring = require('./threatScoring');
 const statsTracker = require('./statsTracker');
+const fs = require('fs');
+const path = require('path');
 
 class UnifiedAIDetectionService {
   constructor() {
@@ -71,9 +73,40 @@ class UnifiedAIDetectionService {
         zones: camera.zones || []
       });
 
+      // Extract annotated frame (if present) before formatting/scoring
+      const annotatedFrame = aiResult?.annotated_frame || null;
+      if (aiResult) delete aiResult.annotated_frame;
+
+      if (annotatedFrame) {
+        this.io?.to(`camera-${cameraId}`).emit('annotated-frame', {
+          cameraId,
+          frame: annotatedFrame,
+          timestamp: new Date().toISOString()
+        });
+      }
+
       if (!aiResult || aiResult.error) {
         logger.warn(`[UnifiedAI] AI returned no result for ${cameraId}: ${aiResult?.error}`);
         return null;
+      }
+
+      // Extract and emit annotated frame efficiently (reads from disk, avoids JSON.parse block)
+      if (aiResult.annotated_frame_path) {
+        // __dirname is server/src/services. Go up to server, then into temp
+        const framePath = path.join(__dirname, '..', '..', aiResult.annotated_frame_path);
+        delete aiResult.annotated_frame_path;
+        
+        fs.readFile(framePath, (err, buffer) => {
+          if (err) {
+            logger.error(`[UnifiedAI] Failed to read frame from ${framePath}: ${err.message}`);
+          } else {
+            this.io?.to(`camera-${cameraId}`).emit('annotated-frame', {
+              cameraId,
+              frame: buffer.toString('base64'), // Convert back to base64 for foolproof client parsing
+              timestamp: new Date().toISOString()
+            });
+          }
+        });
       }
 
       // Score the threat (for secondary signals)
@@ -117,11 +150,24 @@ class UnifiedAIDetectionService {
     const out = [];
     for (const person of aiResult.persons || []) {
       const pose = (aiResult.poses || []).find(p => p.track_id === person.track_id);
+      
+      // Determine if there is a behavior alert matching this person
+      const behavior = pose?.behavior || null;
+      let type = 'person';
+      if (behavior) {
+        const behLower = behavior.toLowerCase();
+        if (['violence', 'fighting', 'assault', 'shooting'].includes(behLower)) type = 'violence';
+        else if (['theft', 'stealing', 'shoplifting', 'robbery'].includes(behLower)) type = 'theft';
+        else if (behLower === 'intrusion') type = 'intrusion';
+      }
+
       out.push({
-        type: 'person',
+        type: type,
         trackId: person.track_id,
         boundingBox: this._bboxToRelative(person.bbox, aiResult.frame_size),
-        confidence: 0.9,
+        confidence: person.conf || 0.9,
+        behavior: behavior,
+        behaviorConf: pose?.behavior_conf || 0,
         posture: pose?.posture || 'unknown',
         gesture: pose?.gesture || 'unknown',
         zone: pose?.zone || null

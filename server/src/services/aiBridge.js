@@ -25,12 +25,13 @@ function pickEngine() {
   const override = (process.env.SENTINEL_AI_ENGINE || 'auto').toLowerCase();
   if (override === 'pro')   return { file: 'ai_engine_pro.py',     name: 'pro',  reason: 'env SENTINEL_AI_ENGINE=pro' };
   if (override === 'lstm') return { file: 'ai_engine.py',          name: 'lstm', reason: 'env SENTINEL_AI_ENGINE=lstm' };
+  if (override === 'sv')   return { file: 'ai_engine_sv.py',       name: 'sv',   reason: 'env SENTINEL_AI_ENGINE=sv' };
 
   const lstmModel = process.env.SENTINEL_BEHAVIOR_MODEL || LSTM_MODEL_DEFAULT;
   if (fs.existsSync(lstmModel)) {
-    return { file: 'ai_engine.py', name: 'lstm', reason: `model found: ${lstmModel}` };
+    return { file: 'ai_engine_sv.py', name: 'sv', reason: `model found: ${lstmModel} (defaulting to sv)` };
   }
-  return { file: 'ai_engine_pro.py', name: 'pro', reason: 'no behavior model found' };
+  return { file: 'ai_engine_sv.py', name: 'sv', reason: 'no behavior model found (defaulting to sv)' };
 }
 
 class AIBridge {
@@ -191,9 +192,9 @@ class AIBridge {
       const timeout = setTimeout(() => {
         if (this.pendingRequests.has(id)) {
           this.pendingRequests.delete(id);
-          reject(new Error('AI detect timeout (60s)'));
+          reject(new Error('AI detect timeout (120s)'));
         }
-      }, 60000);
+      }, 120000);
       this.pendingRequests.set(id, {
         resolve: (v) => { clearTimeout(timeout); resolve(v); },
         reject: (e) => { clearTimeout(timeout); reject(e); }

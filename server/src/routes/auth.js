@@ -145,7 +145,6 @@ router.get('/profile', authenticate, async (req, res) => {
       email: user.email,
       name: user.name,
       avatar: user.avatar,
-      phoneNumbers: user.phoneNumbers || [],
       role: user.role,
       createdAt: user.createdAt
     });
@@ -167,7 +166,7 @@ router.put('/profile', authenticate, async (req, res) => {
     }
     res.json({
       message: 'Profile updated',
-      user: { id: user.id, email: user.email, name: user.name, avatar: user.avatar, phoneNumbers: user.phoneNumbers }
+      user: { id: user.id, email: user.email, name: user.name, avatar: user.avatar }
     });
   } catch (error) {
     logger.error('Profile update error:', error);
@@ -175,55 +174,7 @@ router.put('/profile', authenticate, async (req, res) => {
   }
 });
 
-// Manage phone numbers (add/update/remove up to 3 Tunisian numbers)
-router.post('/phone', authenticate, async (req, res) => {
-  try {
-    const { number, label } = req.body;
-    if (!number) return res.status(400).json({ error: 'Phone number required' });
 
-    const cleaned = number.replace(/\s/g, '');
-    if (!/^(\+216\d{8}|216\d{8}|\d{8})$/.test(cleaned)) {
-      return res.status(400).json({ error: 'Invalid Tunisian phone number. Format: +216 XX XXX XXX or 8 digits' });
-    }
-
-    const formatted = cleaned.startsWith('+216') ? cleaned : cleaned.startsWith('216') ? `+${cleaned}` : `+216${cleaned}`;
-
-    const user = await db.getUserById(req.user.id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-
-    let phones = user.phoneNumbers || [];
-    const existingIndex = phones.findIndex(p => p.number === formatted);
-    if (existingIndex >= 0) {
-      phones[existingIndex].label = label || phones[existingIndex].label;
-      phones[existingIndex].active = true;
-    } else {
-      if (phones.length >= 3) {
-        return res.status(400).json({ error: 'Maximum 3 phone numbers allowed' });
-      }
-      phones.push({ number: formatted, label: label || `Phone ${phones.length + 1}`, active: true });
-    }
-
-    await db.updateUser(req.user.id, { phoneNumbers: phones });
-    res.json({ message: 'Phone number added', phoneNumbers: phones });
-  } catch (error) {
-    logger.error('Add phone error:', error);
-    res.status(500).json({ error: 'Failed to add phone number' });
-  }
-});
-
-router.delete('/phone/:number', authenticate, async (req, res) => {
-  try {
-    const user = await db.getUserById(req.user.id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-
-    let phones = (user.phoneNumbers || []).filter(p => p.number !== req.params.number);
-    await db.updateUser(req.user.id, { phoneNumbers: phones });
-    res.json({ message: 'Phone removed', phoneNumbers: phones });
-  } catch (error) {
-    logger.error('Remove phone error:', error);
-    res.status(500).json({ error: 'Failed to remove phone' });
-  }
-});
 
 // Known faces management (for face recognition whitelist)
 router.get('/known-faces', authenticate, async (req, res) => {

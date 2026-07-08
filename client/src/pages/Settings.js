@@ -4,19 +4,16 @@ import Navbar from '../components/Navbar';
 import { motion } from 'framer-motion';
 import {
   Settings as SettingsIcon, Bell, Shield, Eye, Smartphone,
-  Save, Mail, Phone, MessageSquare, Lock, Clock, Gauge, Plus, Trash2
+  Save, Mail, Send, MessageSquare, Lock, Clock, Gauge, Plus, Trash2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function Settings() {
-  const { api, user, updateProfile, addPhoneNumber, removePhoneNumber } = useAuth();
+  const { api, user, updateProfile } = useAuth();
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('notifications');
-  const [newPhone, setNewPhone] = useState('');
-  const [newPhoneLabel, setNewPhoneLabel] = useState('');
-  const [addingPhone, setAddingPhone] = useState(false);
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -39,33 +36,8 @@ export default function Settings() {
     finally { setSaving(false); }
   };
 
-  const handleAddPhone = async (e) => {
-    e.preventDefault();
-    if (!newPhone.trim()) return;
-    setAddingPhone(true);
-    const result = await addPhoneNumber(newPhone, newPhoneLabel || undefined);
-    setAddingPhone(false);
-    if (result.success) {
-      toast.success('Phone number added');
-      setNewPhone('');
-      setNewPhoneLabel('');
-    } else {
-      toast.error(result.error);
-    }
-  };
-
-  const handleRemovePhone = async (number) => {
-    const result = await removePhoneNumber(number);
-    if (result.success) {
-      toast.success('Phone removed');
-    } else {
-      toast.error(result.error);
-    }
-  };
-
   const tabs = [
     { key: 'notifications', label: 'Notifications', icon: Bell },
-    { key: 'phones', label: 'Phone Numbers', icon: Phone },
     { key: 'detection', label: 'AI Detection', icon: Eye },
     { key: 'security', label: 'Security', icon: Shield },
     { key: 'profile', label: 'Profile', icon: SettingsIcon },
@@ -123,7 +95,7 @@ export default function Settings() {
                 <h2 className="text-xl font-bold text-white mb-6 flex items-center"><Bell className="w-5 h-5 mr-2 text-indigo-400" />Notification Preferences</h2>
                 <div className="space-y-4">
                   {[
-                    { key: 'sms', label: 'SMS Alerts', desc: 'Receive alerts via text message', icon: MessageSquare, color: 'emerald' },
+                    { key: 'telegram', label: 'Telegram Alerts', desc: 'Encrypted real-time alerts with photos', icon: Send, color: 'blue' },
                     { key: 'email', label: 'Email Alerts', desc: 'Receive alerts via email with captured photos', icon: Mail, color: 'blue' },
                     { key: 'push', label: 'Push Notifications', desc: 'Real-time browser notifications', icon: Smartphone, color: 'purple' },
                   ].map(item => {
@@ -153,6 +125,26 @@ export default function Settings() {
                       </div>
                     );
                   })}
+                  
+                  {settings?.notifications?.telegram && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="p-4 bg-slate-800/50 rounded-xl border border-blue-500/30">
+                      <label className="block text-sm font-semibold text-white mb-2 flex items-center">
+                        <Send className="w-4 h-4 mr-2 text-blue-400" />
+                        Telegram Chat ID
+                      </label>
+                      <input
+                        type="text"
+                        value={settings?.notifications?.telegramChatId || ''}
+                        onChange={(e) => updateSettings('notifications', { telegramChatId: e.target.value })}
+                        placeholder="e.g. 123456789"
+                        className="input-3d w-full mb-2"
+                      />
+                      <p className="text-xs text-slate-400">
+                        To get your Chat ID, start a conversation with your bot <strong>@SentinelAiCamBot</strong>, then forward any message from it to <strong>@userinfobot</strong>.
+                      </p>
+                    </motion.div>
+                  )}
+
                   <div className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/30">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center space-x-3">
@@ -171,89 +163,6 @@ export default function Settings() {
                       className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500" />
                   </div>
                 </div>
-              </motion.div>
-            )}
-
-            {/* Phone Numbers */}
-            {activeTab === 'phones' && (
-              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="glass rounded-2xl p-6 border border-slate-800/50">
-                <h2 className="text-xl font-bold text-white mb-2 flex items-center"><Phone className="w-5 h-5 mr-2 text-indigo-400" />Phone Numbers for SMS Alerts</h2>
-                <p className="text-sm text-slate-400 mb-6">Add up to 3 phone numbers to receive security alerts</p>
-
-                {/* Existing phones */}
-                <div className="space-y-3 mb-6">
-                  {(user?.phoneNumbers || []).length === 0 ? (
-                    <div className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/30 text-center">
-                      <Phone className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-                      <p className="text-slate-400 text-sm">No phone numbers added yet</p>
-                    </div>
-                  ) : (
-                    user.phoneNumbers.map((phone, i) => (
-                      <div key={i} className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/30 flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
-                            <Phone className="w-5 h-5 text-emerald-400" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-bold text-white">{phone.number}</p>
-                            <p className="text-xs text-slate-400">{phone.label}</p>
-                          </div>
-                        </div>
-                        <motion.button
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.9 }}
-                          onClick={() => handleRemovePhone(phone.number)}
-                          className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl border border-red-500/20"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </motion.button>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                {/* Add new phone */}
-                {(user?.phoneNumbers || []).length < 3 && (
-                  <form onSubmit={handleAddPhone} className="space-y-3">
-                    <div className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/30">
-                      <label className="block text-sm font-semibold text-slate-300 mb-2">Phone Number</label>
-                      <input
-                        type="tel"
-                        value={newPhone}
-                        onChange={(e) => setNewPhone(e.target.value)}
-                        placeholder="+1234567890"
-                        required
-                        className="input-3d w-full"
-                      />
-                      <p className="text-xs text-slate-500 mt-1.5">International format: e.g. +1234567890</p>
-                    </div>
-                    <div className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/30">
-                      <label className="block text-sm font-semibold text-slate-300 mb-2">Label (optional)</label>
-                      <input
-                        type="text"
-                        value={newPhoneLabel}
-                        onChange={(e) => setNewPhoneLabel(e.target.value)}
-                        placeholder="e.g. Home, Office"
-                        className="input-3d w-full"
-                      />
-                    </div>
-                    <motion.button
-                      type="submit"
-                      disabled={addingPhone}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      className="flex items-center px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-500/20 disabled:opacity-50"
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      {addingPhone ? 'Adding...' : 'Add Phone Number'}
-                    </motion.button>
-                  </form>
-                )}
-                {(user?.phoneNumbers || []).length >= 3 && (
-                  <p className="text-xs text-amber-400 bg-amber-500/10 p-3 rounded-xl border border-amber-500/20">
-                    Maximum of 3 phone numbers reached. Remove one to add another.
-                  </p>
-                )}
               </motion.div>
             )}
 

@@ -527,7 +527,7 @@ function Step2Connection({ form, updateField, updateConn, updateCap, updateNet, 
   React.useEffect(() => {
     if (form.protocol !== 'usb') return;
     setUsbLoading(true);
-    const API_BASE = process.env.REACT_APP_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
+    const API_BASE = process.env.REACT_APP_API_URL || `${window.location.protocol}//${window.location.hostname}:5001`;
     fetch(`${API_BASE}/api/cameras/usb-devices`, {
       headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
     })

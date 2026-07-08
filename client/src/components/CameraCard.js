@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { Camera, MapPin, AlertTriangle, Shield, Globe, Trash2, RefreshCw } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-const API_BASE = process.env.REACT_APP_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`;
+const API_BASE = process.env.REACT_APP_API_URL || `${window.location.protocol}//${window.location.hostname}:5001`;
 
 export default function CameraCard({ camera, alertCount = 0, onDelete }) {
   const { token } = useAuth();

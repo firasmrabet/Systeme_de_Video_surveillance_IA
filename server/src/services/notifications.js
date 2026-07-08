@@ -21,16 +21,15 @@ class NotificationService {
         logger.warn('Notification Service running in DRY-RUN mode');
       }
 
-      const hasTwilio = !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN);
+      const hasTelegram = !!process.env.TELEGRAM_BOT_TOKEN;
       const hasSmtp = !!(process.env.SMTP_USER && process.env.SMTP_PASS);
-      logger.info(`[Notifications] Config: dryRun=${this.dryRun}, twilio=${hasTwilio}, smtp=${hasSmtp}`);
+      logger.info(`[Notifications] Config: dryRun=${this.dryRun}, telegram=${hasTelegram}, smtp=${hasSmtp}`);
 
-      if (!this.dryRun && hasTwilio) {
-        const twilio = require('twilio');
-        this.twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-        logger.info('Twilio SMS service initialized');
+      if (!this.dryRun && hasTelegram) {
+        this.telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+        logger.info('Telegram Bot professional service initialized (HTTPS Encrypted)');
       } else if (!this.dryRun) {
-        logger.warn('[Notifications] Twilio not configured — SMS will NOT be sent');
+        logger.warn('[Notifications] Telegram Bot Token not configured — Alerts will NOT be sent via Telegram');
       }
 
       if (!this.dryRun && hasSmtp) {
@@ -80,11 +79,13 @@ class NotificationService {
 
       const message = this._formatAlertMessage(alert, camera, user, frameBase64);
 
-      // Send SMS to all active phone numbers
-      if (notifPrefs.sms && user.phoneNumbers && user.phoneNumbers.length > 0) {
-        const activePhones = user.phoneNumbers.filter(p => p.active);
-        for (const phone of activePhones) {
-          await this._sendSMS(phone.number, message.sms);
+      // Send Telegram Alert (End-to-End Encrypted via HTTPS)
+      if (notifPrefs.telegram && notifPrefs.telegramChatId) {
+        await this._sendTelegramMessage(notifPrefs.telegramChatId, message.textAlert, frameBase64);
+        // Also send the video clip to Telegram if available
+        const rawClipPath = alert.clip_path || (alert.details && alert.details.clipPath);
+        if (rawClipPath) {
+          await this._sendTelegramVideo(notifPrefs.telegramChatId, rawClipPath, `🎬 Video clip: ${alert.type}`);
         }
       }
 
@@ -147,7 +148,7 @@ class NotificationService {
     return {
       short: `${emoji} ${alertType} at ${camera.name}`,
       emailSubject: `${emoji} SENTINELAI Alert: ${alertType} - ${camera.name}`,
-      sms: `${emoji} SENTINELAI SECURITY ALERT\n\n${alertType}\nLocation: ${camera.location}\nTime: ${time}\nConfidence: ${(alert.confidence * 100).toFixed(1)}%\n\n${analysisText}\n\n${clipLink ? `Video Clip: ${clipLink}\n\n` : ''}Check your security system immediately.`,
+      textAlert: `${emoji} SENTINELAI SECURITY ALERT\n\n${alertType}\nLocation: ${camera.location}\nTime: ${time}\nConfidence: ${(alert.confidence * 100).toFixed(1)}%\n\n${analysisText}\n\n${clipLink ? `Video Clip: ${clipLink}\n\n` : ''}Check your security system immediately.`,
       emailHtml: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: linear-gradient(135deg, #1e1b4b, #312e81); padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
@@ -203,28 +204,112 @@ class NotificationService {
     return analyses[type] || `A security event has been detected by the AI analysis engine. The detection was based on advanced behavioral analysis and pattern recognition algorithms.`;
   }
 
-  async _sendSMS(phoneNumber, message) {
+  async _sendTelegramMessage(chatId, message, frameBase64) {
     if (this.dryRun) {
-      logger.info(`[SMS DRY-RUN] To: ${phoneNumber}\n${message}`);
+      logger.info(`[TELEGRAM DRY-RUN] To: ${chatId}\n${message}`);
       return;
     }
-    if (!this.twilioClient) {
-      logger.info(`[SMS LOG] To: ${phoneNumber}\n${message}`);
+    if (!this.telegramToken || !chatId) {
+      logger.info(`[TELEGRAM LOG] To: ${chatId} (Token or ChatID missing)\n${message}`);
       return;
     }
+
     try {
-      await this.twilioClient.messages.create({
-        body: message,
-        from: process.env.TWILIO_PHONE_NUMBER,
-        to: phoneNumber
-      });
-      logger.info(`SMS sent to ${phoneNumber}`);
-    } catch (error) {
-      if (error.code === 63038 || error.status === 429) {
-        logger.warn(`[SMS Quota] Twilio limit reached for ${phoneNumber}. SMS skipped (fallback to email).`);
+      if (frameBase64) {
+        // Send as photo with caption (Highly secure HTTPS transmission)
+        const buffer = Buffer.from(frameBase64, 'base64');
+        const blob = new Blob([buffer], { type: 'image/jpeg' });
+        
+        const formData = new FormData();
+        formData.append('chat_id', chatId);
+        formData.append('photo', blob, 'alert.jpg');
+        formData.append('caption', message);
+
+        const response = await fetch(`https://api.telegram.org/bot${this.telegramToken}/sendPhoto`, {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await response.json();
+        if (data.ok) {
+          logger.info(`Secure Telegram photo alert sent to Chat ID ${chatId}`);
+        } else {
+          logger.error(`Telegram API error: ${data.description}`);
+        }
       } else {
-        logger.error(`Failed to send SMS to ${phoneNumber}:`, error.message);
+        // Send as text only
+        const response = await fetch(`https://api.telegram.org/bot${this.telegramToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: message
+          })
+        });
+
+        const data = await response.json();
+        if (data.ok) {
+          logger.info(`Secure Telegram text alert sent to Chat ID ${chatId}`);
+        } else {
+          logger.error(`Telegram API error: ${data.description}`);
+        }
       }
+    } catch (error) {
+      logger.error(`Failed to send Telegram message to ${chatId}:`, error.message);
+    }
+  }
+
+  async _sendTelegramVideo(chatId, rawClipPath, caption) {
+    if (this.dryRun) {
+      logger.info(`[TELEGRAM VIDEO DRY-RUN] To: ${chatId}, clip: ${rawClipPath}`);
+      return;
+    }
+    if (!this.telegramToken || !chatId) return;
+
+    try {
+      const normalizedPath = rawClipPath.startsWith('/') ? rawClipPath.substring(1) : rawClipPath;
+      const absoluteClipPath = path.join(__dirname, '../../', normalizedPath);
+
+      // Wait for the clip file to be fully written by Python's background thread (up to 10 seconds)
+      let attempts = 0;
+      let lastSize = -1;
+      while (attempts < 20) {
+        if (fs.existsSync(absoluteClipPath)) {
+          const stats = fs.statSync(absoluteClipPath);
+          if (stats.size > 0 && stats.size === lastSize) break; // File is stable and ready
+          lastSize = stats.size;
+        }
+        await new Promise(r => setTimeout(r, 500));
+        attempts++;
+      }
+
+      if (!fs.existsSync(absoluteClipPath) || fs.statSync(absoluteClipPath).size === 0) {
+        logger.warn(`[Telegram Video] Clip file not found or empty after waiting: ${absoluteClipPath}`);
+        return;
+      }
+
+      const videoBuffer = fs.readFileSync(absoluteClipPath);
+      const blob = new Blob([videoBuffer], { type: 'video/mp4' });
+
+      const formData = new FormData();
+      formData.append('chat_id', chatId);
+      formData.append('video', blob, 'alert-clip.mp4');
+      formData.append('caption', caption || 'Security Alert Video Clip');
+      formData.append('supports_streaming', 'true');
+
+      const response = await fetch(`https://api.telegram.org/bot${this.telegramToken}/sendVideo`, {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await response.json();
+      if (data.ok) {
+        logger.info(`Secure Telegram video clip sent to Chat ID ${chatId}`);
+      } else {
+        logger.error(`Telegram video API error: ${data.description}`);
+      }
+    } catch (error) {
+      logger.error(`Failed to send Telegram video to ${chatId}:`, error.message);
     }
   }
 
@@ -258,7 +343,21 @@ class NotificationService {
         // Remove leading slash so path.join doesn't jump to the C: root on Windows
         const normalizedPath = rawClipPath.startsWith('/') ? rawClipPath.substring(1) : rawClipPath;
         const absoluteClipPath = path.join(__dirname, '../../', normalizedPath);
-        if (fs.existsSync(absoluteClipPath)) {
+        
+        // Wait for the clip file to be fully written by Python's background thread
+        let attempts = 0;
+        let lastSize = -1;
+        while (attempts < 20) {
+          if (fs.existsSync(absoluteClipPath)) {
+            const stats = fs.statSync(absoluteClipPath);
+            if (stats.size > 0 && stats.size === lastSize) break;
+            lastSize = stats.size;
+          }
+          await new Promise(r => setTimeout(r, 500));
+          attempts++;
+        }
+
+        if (fs.existsSync(absoluteClipPath) && fs.statSync(absoluteClipPath).size > 0) {
           mailOptions.attachments.push({
             filename: `alert-video.mp4`,
             path: absoluteClipPath,
