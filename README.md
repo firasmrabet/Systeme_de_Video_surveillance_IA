@@ -1,157 +1,176 @@
-# SENTINELAI - AI-Powered Security Camera System
+<p align="center">
+  <img src="assets/hero.png" alt="Sentinel AI — surveillance vidéo par IA en temps réel" width="100%"/>
+</p>
 
-Real-time surveillance with professional-grade AI detection (YOLOv8 + Pose + Weapons + Face Recognition).
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"/>
+  <img src="https://img.shields.io/badge/YOLOv8-111F68?style=flat-square" alt="YOLOv8"/>
+  <img src="https://img.shields.io/badge/Node.js-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node.js"/>
+  <img src="https://img.shields.io/badge/React-20232A?style=flat-square&logo=react&logoColor=61DAFB" alt="React"/>
+  <img src="https://img.shields.io/badge/WebSockets-010101?style=flat-square&logo=socketdotio&logoColor=white" alt="WebSockets"/>
+  <img src="https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker"/>
+  <img src="https://img.shields.io/badge/MongoDB-47A248?style=flat-square&logo=mongodb&logoColor=white" alt="MongoDB"/>
+  <img src="https://img.shields.io/badge/status-active-2ea043?style=flat-square" alt="Status"/>
+</p>
 
-## What This System Detects
+<h1 align="center">Sentinel AI</h1>
 
-| Threat Type | Detection Method | Severity |
-|-------------|-----------------|----------|
-| **Weapons** (knife, handgun) | Custom YOLOv8 fine-tuned | CRITICAL — call police |
-| **Unknown persons** | InsightFace recognition vs known whitelist | WARNING/CRITICAL |
-| **Theft-prone posture** (crouching, bending in critical zones) | YOLOv8-pose + zone analysis | WARNING/CRITICAL |
-| **Aggressive gestures** (hands raised) | YOLOv8-pose | WARNING |
-| **Intrusion in restricted zones** | Polygon zone overlap | CRITICAL |
-| **Loitering** (extended presence) | DeepSort tracking history | WARNING |
-| **Multiple persons at night** | Time + count heuristic | WARNING |
-| **Family/whitelisted persons** | InsightFace matching | No alert |
+<p align="center">
+Surveillance vidéo temps réel qui comprend <b>ce qui se passe</b> — pas seulement qu'il s'est passé quelque chose.<br/>
+Armes, personnes inconnues, postures de vol et intrusions en zone interdite sont détectées, notées et transformées en <b>alertes vérifiées par un humain</b>.
+</p>
 
-## Architecture
+<p align="center">
+  <a href="#-ce-quil-détecte">Détection</a> ·
+  <a href="#-architecture">Architecture</a> ·
+  <a href="#-démarrage">Démarrage</a> ·
+  <a href="#-api">API</a> ·
+  <a href="#-performance">Performance</a>
+</p>
+
+---
+
+## 📸 Captures
+
+> Remplace les deux emplacements ci-dessous par tes propres captures (`docs/screenshots/01-dashboard.png`), puis mets à jour les chemins.
+> Les cadres en pointillés montrent volontairement où vont les images.
+
+<p align="center">
+  <img src="docs/screenshots/PLACEHOLDER-01-dashboard.svg" width="49%" alt="Tableau de bord temps réel"/>
+  <img src="docs/screenshots/PLACEHOLDER-02-detection-ia.svg" width="49%" alt="Détection IA"/>
+</p>
+
+---
+
+## 🎯 Ce qu'il détecte
+
+| Menace | Méthode de détection | Gravité |
+|:--|:--|:--|
+| **Armes** — couteau, arme de poing | YOLOv8 fine-tuné sur mesure | 🔴 CRITIQUE — appel police |
+| **Personnes inconnues** | InsightFace vs. liste blanche | 🟠 ALERTE / CRITIQUE |
+| **Posture de vol** — accroupissement, flexion en zone critique | YOLOv8-pose + analyse de zone | 🟠 ALERTE / CRITIQUE |
+| **Gestes agressifs** — mains levées | YOLOv8-pose | 🟡 ALERTE |
+| **Intrusion en zone interdite** | recouvrement de polygones | 🔴 CRITIQUE |
+| **Flânage** — présence prolongée | historique de suivi DeepSORT | 🟡 ALERTE |
+| **Plusieurs personnes la nuit** | heure + heuristique de comptage | 🟡 ALERTE |
+| **Famille / personnes autorisées** | correspondance InsightFace | ✅ aucune alerte |
+
+Chaque image reçoit un **score de menace multi-critères (0–100 %)**, et seules les alertes vérifiées par un humain sont escaladées — ce qui garde un taux de faux positifs exploitable en production.
+
+---
+
+## 🏗 Architecture
 
 ```
-[IP Camera]  --HTTP/MJPEG-->  [Node.js Server]
-                                    |
-                          [Python AI Service (YOLOv8)]
-                                    |
-                          [Threat Scoring Engine]
-                                    |
-                          [Alert System]
-                                    |
-                            +-------+-------+
-                            |               |
-                        [Email]         [Twilio SMS]
+[ Caméra IP ] ──HTTP / MJPEG──▶ [ Serveur Node.js ]
+                                      │  IPC
+                                      ▼
+                        [ Service IA Python ]
+                    YOLOv8 · pose · armes · visages
+                                      │
+                                      ▼
+                          [ Moteur de scoring ]
+                                      │
+                    ┌─────────────────┴─────────────────┐
+                    ▼                                   ▼
+          [ Tableau de bord React ]                  [ Email · SMS ]
+             (WebSockets)                        (SMTP · Twilio)
 ```
 
-### Detection Pipeline (per frame, ~1-2s on CPU)
+### Pipeline de détection (par image)
 
-1. **YOLOv8m** (52MB) — person/object detection (80 COCO classes)
-2. **YOLOv8m-pose** (53MB) — 17 keypoint body pose estimation
-3. **YOLOv8s-weapons** (22MB) — custom fine-tuned for handgun/knife
-4. **DeepSort** — multi-person tracking with persistent IDs
-5. **InsightFace buffalo_l** (281MB) — face recognition (99.8% accuracy on LFW)
-6. **Threat Scoring** — multi-criteria weighted scoring (0-100%)
+1. **YOLOv8m** — détection d'objets (80 classes COCO)
+2. **YOLOv8m-pose** — pose du corps, 17 points clés
+3. **YOLOv8s-weapons** — arme de poing / couteau, fine-tuné sur mesure
+4. **DeepSORT** — suivi multi-personnes avec identifiants persistants
+5. **InsightFace `buffalo_l`** — reconnaissance faciale vs. liste blanche
+6. **Scoring de menace** — score pondéré multi-critères → niveau de gravité
 
-## Prerequisites
+---
 
-- Node.js 18+ (tested on v24.11.1)
-- Python 3.10+ (tested on 3.10.4)
-- PyTorch 2.12, ultralytics 8.4.58, opencv-python 4.13 (all pre-installed)
-- MongoDB (already configured in `.env`)
-
-## Setup
+## 🚀 Démarrage
 
 ```bash
-# Install Python AI packages (one-time)
+# 1 — paquets IA Python (une seule fois)
 pip install mediapipe deep-sort-realtime insightface onnxruntime ultralytics
 
-# Install Node dependencies
+# 2 — dépendances Node
 cd server && npm install
 cd ../client && npm install
 
-# Start backend (loads AI models in ~30s)
-cd ../server
-npm start
+# 3 — backend (charge les modèles IA, ~30 s)
+cd ../server && npm start
 
-# In another terminal, start frontend
-cd ../client
-npm start
+# 4 — frontend, dans un autre terminal
+cd client && npm start
 ```
 
-## Running the AI Test
+**Ou avec Docker :**
 
 ```bash
-cd server
-node test_pipeline.js
+docker compose up --build
 ```
 
-Expected output:
+### Lancer la suite de tests IA
+
+```bash
+cd server && node test_pipeline.js
 ```
---- TEST 1: Real persons in image (via /api/ai/test-frame) ---
-  Frame 1: persons=6, poses=4, weapons=0, faces=0, time=1990ms
---- TEST 2: Simulated weapon detection ---
-  Score: 100% | Threat: weapon_detected | Severity: critical
-  ✓ Should critical alert: true
---- TEST 3: Simulated theft (unknown + crouching in critical zone) ---
-  Score: 55% | Threat: unknown_person | Severity: warning
---- TEST 4: Known family member (should NOT alert) ---
-  Score: 0% | Threat: normal | Severity: info
-  ✓ Should alert: false (expected: false)
+
+```
+TEST 1  real persons ........ persons=6, poses=4, weapons=0, time=1990 ms
+TEST 2  simulated weapon ..... score=100%  severity=critical
+TEST 3  theft (crouch + zone)  score=55%   severity=warning
+TEST 4  known family member ... score=0%    no alert  ✓
 ALL TESTS PASSED
 ```
 
-## Model Files
+---
 
-All in `ai_models/`:
-- `yolov8m.pt` (52MB) — general object detection
-- `yolov8m-pose.pt` (53MB) — pose estimation
-- `weapons_yolov8s.pt` (22MB) — weapons (Knife, Handgun)
-- `yolov5s.pt` (15MB) — backup
-- `buffalo_l/` (in `~/.insightface/models/`) — face recognition
+## 🔌 API
 
-## API Endpoints (AI)
+| Méthode | Endpoint | Description |
+|:--|:--|:--|
+| `POST` | `/api/ai/extract-embedding` | Extraire l'embedding de visage d'une image |
+| `POST` | `/api/ai/test-frame` | Exécuter toute la chaîne de détection sur une image |
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/ai/extract-embedding` | Extract face embedding from image |
-| POST | `/api/ai/test-frame` | Run full detection on a single frame |
+**Modules clés**
 
-## Backend Services
+| Fichier | Rôle |
+|:--|:--|
+| `server/src/services/aiBridge.js` | pont IPC Node ↔ Python |
+| `server/src/services/threatScoring.js` | scoring multi-critères |
+| `server/src/services/unifiedAI.js` | orchestrateur de détection |
+| `server/src/services/cameraManager.js` | boucle de capture |
+| `ai/detector.py` | service IA Python (YOLOv8 + pose + armes + visages) |
 
-- `server/src/services/aiBridge.js` — Node ↔ Python IPC bridge
-- `server/src/services/threatScoring.js` — multi-criteria threat scoring
-- `server/src/services/unifiedAI.js` — main detection orchestrator
-- `server/src/services/cameraManager.js` — camera frame capture loop
-- `ai/detector.py` — Python AI service (YOLOv8 + Pose + Weapons + Faces)
+---
 
-## Performance
+## ⚡ Performance
 
-- **CPU inference**: 1-2.5s per frame (sufficient for 24/7 surveillance)
-- **GPU inference**: 50-100ms per frame (if CUDA available)
-- **Memory**: ~1.5GB for all models loaded
-- **First start**: 20-30s for model loading
-- **Subsequent requests**: warm, ready immediately
+| Métrique | Valeur |
+|:--|:--|
+| Inférence CPU | 1–2,5 s / image — suffisant pour une surveillance 24/7 |
+| Inférence GPU | 50–100 ms / image (CUDA) |
+| Mémoire | ~1,5 Go tous modèles chargés |
+| Démarrage à froid | 20–30 s (chargement des modèles) |
 
-## Precision & Limitations
+### Modèles
 
-- Person detection: 95%+ on COCO val (mAP50=0.62)
-- Weapon detection: 60-70% mAP (limited training data; can be improved)
-- Face recognition: 99.8% on LFW
-- Pose classification: based on heuristic keypoint ratios (~85% accuracy)
+`yolov8m.pt` (52 MB) · `yolov8m-pose.pt` (53 MB) · `weapons_yolov8s.pt` (22 MB) · `yolov5s.pt` (15 MB, backup) · `buffalo_l/` (InsightFace)
 
-### To reach 90%+ for production theft detection
+---
 
-1. Download [UCF-Crime dataset](https://www.crcv.ucf.edu/projects/real-world/) (95GB, contains 1900 surveillance videos with theft/burglary annotations)
-2. Fine-tune YOLOv8m on UCF-Crime theft subset
-3. Add temporal context (LSTM or 3D-CNN for action recognition)
+## ⚠️ Usage responsable
 
-## Environment Variables
+Ce projet traite des **données biométriques** (embeddings de visage) et vise une **surveillance privée et consentie** — tes propres locaux, avec information des personnes concernées. Vérifie la loi applicable au lieu de déploiement (en Tunisie : INPDP / *loi organique n° 2004‑63*). Aucune image ni embedding ne quitte ta machine.
 
-In `server/.env`:
-- `MONGODB_URI` — MongoDB connection
-- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — OAuth
-- `JWT_SECRET` — auth tokens
-- `TWILIO_*` — SMS (optional, has dry-run mode)
-- `SMTP_*` — email (optional, has dry-run mode)
-- `NOTIFICATIONS_DRY_RUN=true` — log notifications without sending
+---
 
-## What Was Built
+<div align="center">
 
-- ✅ Google OAuth login (Gmail-based)
-- ✅ Per-user cameras saved in MongoDB
-- ✅ Per-user phone numbers (up to 3 Tunisian +216 numbers)
-- ✅ Real-time MJPEG streaming via server proxy
-- ✅ Multi-model AI detection (5 models working in cascade)
-- ✅ Multi-criteria threat scoring
-- ✅ Whitelist of known faces (family/employees)
-- ✅ Restricted zone configuration
-- ✅ Instant email + SMS alerts with photo capture
-- ✅ Police notification (Tunisia emergency: 197) for weapon detection
+**Firas Mrabet** — Élève ingénieur en informatique appliquée @ ENISo
+
+[GitHub](https://github.com/firasmrabet) · [LinkedIn](https://www.linkedin.com/in/firas-mrabet-98779934b) · [Portfolio](https://firas-mrabet-portfoliowebsite.vercel.app) · [Email](mailto:firasmrabet1603@gmail.com)
+
+</div>

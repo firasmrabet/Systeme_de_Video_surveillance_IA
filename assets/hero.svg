@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="280" viewBox="0 0 1200 280" role="img" aria-label="Sentinel AI — COMPUTER VISION · EDGE AI">
+  <title>Sentinel AI — COMPUTER VISION · EDGE AI</title>
+  <defs>
+    <linearGradient id="bg-sentinel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#060A12"/>
+      <stop offset="0.55" stop-color="#091524"/>
+      <stop offset="1" stop-color="#0B1F33"/>
+    </linearGradient>
+    <radialGradient id="glow-sentinel" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#38BDF8" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#38BDF8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="fade-sentinel" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#060A12" stop-opacity="0.92"/>
+      <stop offset="0.52" stop-color="#070D18" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#070D18" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="rule-sentinel" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#38BDF8" stop-opacity="0.95"/>
+      <stop offset="0.35" stop-color="#38BDF8" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#38BDF8" stop-opacity="0"/>
+    </linearGradient>
+    <pattern id="dots-sentinel" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="1.2" cy="1.2" r="1.1" fill="#2A4766" opacity="0.4"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="280" fill="url(#bg-sentinel)"/>
+  <rect width="1200" height="280" fill="url(#dots-sentinel)"/>
+  <rect x="0.75" y="0.75" width="1198.5" height="278.5" rx="14" fill="none" stroke="#1B3350"/>
+  <rect x="0" y="0" width="1200" height="280" fill="url(#fade-sentinel)"/>
+  <rect x="18" y="0.75" width="330" height="2.4" rx="1.2" fill="url(#rule-sentinel)"/>
+
+  <g transform="translate(600,18) scale(0.88) translate(0,0)">
+      <g>
+    <rect x="318" y="34" width="272" height="196" rx="10" fill="none" stroke="#38BDF8" stroke-opacity="0.28"/>
+    <g stroke="#38BDF8" stroke-width="2.4" fill="none" opacity="0.9">
+      <path d="M318 62 V34 H346"/><path d="M562 34 H590 V62"/>
+      <path d="M318 202 V230 H346"/><path d="M562 230 H590 V202"/>
+    </g>
+    <rect x="348" y="66" width="78" height="128" rx="4" fill="#38BDF8" fill-opacity="0.10" stroke="#38BDF8" stroke-width="1.6"/>
+    <rect x="356" y="56" width="62" height="15" rx="3" fill="#38BDF8" fill-opacity="0.92"/>
+    <text x="362" y="67.5" font-family="'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace" font-size="9" fill="#06090F" font-weight="700">person 0.98</text>
+    <rect x="452" y="102" width="96" height="86" rx="4" fill="#38BDF8" fill-opacity="0.10" stroke="#38BDF8" stroke-width="1.6" stroke-dasharray="5 3"/>
+    <rect x="460" y="92" width="70" height="15" rx="3" fill="#0EA5E9" fill-opacity="0.95"/>
+    <text x="466" y="103.5" font-family="'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace" font-size="9" fill="#FFFFFF" font-weight="700">weapon 0.91</text>
+    <g stroke="#38BDF8" stroke-opacity="0.55" stroke-width="1.2">
+      <path d="M416 128 h-24"/><path d="M416 128 h24"/><path d="M416 128 v-16"/><path d="M416 128 v16"/>
+    </g>
+    <circle cx="416" cy="128" r="3.4" fill="#38BDF8"/>
+    <rect x="318" y="34" width="272" height="2" fill="#38BDF8" opacity="0.85">
+      <animate attributeName="y" values="34;228;34" dur="6.5s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;0.9;0" dur="6.5s" repeatCount="indefinite"/>
+    </rect>
+    <g font-family="'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace" font-size="8.5" fill="#38BDF8" opacity="0.75">
+    </g>
+    <g opacity="0.55">
+      <circle cx="300" cy="132" r="130" fill="url(#glow-sentinel)"/>
+    </g>
+  </g>
+  </g>
+
+  <g font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+    <text x="56" y="86" font-size="11.5" font-weight="700" letter-spacing="2.6" fill="#38BDF8">COMPUTER VISION · EDGE AI</text>
+    <text x="56" y="140" font-size="46" font-weight="800" letter-spacing="-0.6" fill="#F5F9FF">Sentinel AI</text>
+    <text x="56" y="172" font-size="15.5" font-weight="450" fill="#8FAFCB">Surveillance temps réel : YOLOv8 + DeepSORT + InsightFace, alertes vérifiées par un humain.</text>
+  </g>
+  <rect x="56" y="206" width="143" height="30" rx="8" fill="#0B1727" stroke="#24405F"/>
+  <text x="127" y="226" text-anchor="middle" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="600" letter-spacing="0.6" fill="#9FC0DE">YOLOv8 · DeepSORT</text>
+  <rect x="209" y="206" width="164" height="30" rx="8" fill="#0B1727" stroke="#24405F"/>
+  <text x="291" y="226" text-anchor="middle" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="600" letter-spacing="0.6" fill="#9FC0DE">Node.js · WebSockets</text>
+  <rect x="383" y="206" width="121" height="30" rx="8" fill="#0B1727" stroke="#24405F"/>
+  <text x="443" y="226" text-anchor="middle" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11.5" font-weight="600" letter-spacing="0.6" fill="#9FC0DE">React · Docker</text>
+  <text x="56" y="256" font-family="'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace" font-size="10.5" letter-spacing="0.8" fill="#4A6584">github.com/firasmrabet/Camera_Surveillance_Intelligente</text>
+  <text x="1168" y="256" text-anchor="end" font-family="'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace" font-size="10.5" letter-spacing="1.4" fill="#4A6584">ENISo · 2026</text>
+</svg>
