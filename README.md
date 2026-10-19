@@ -32,9 +32,6 @@ Armes, personnes inconnues, postures de vol et intrusions en zone interdite sont
 
 ## 📸 Captures
 
-> Remplace les deux emplacements ci-dessous par tes propres captures (`docs/screenshots/01-dashboard.png`), puis mets à jour les chemins.
-> Les cadres en pointillés montrent volontairement où vont les images.
-
 <p align="center">
   <img src="docs/screenshots/PLACEHOLDER-01-dashboard.svg" width="49%" alt="Tableau de bord temps réel"/>
   <img src="docs/screenshots/PLACEHOLDER-02-detection-ia.svg" width="49%" alt="Détection IA"/>
